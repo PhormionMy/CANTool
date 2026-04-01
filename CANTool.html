@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>CAN分析工具</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:monospace;background:#0a0a0a;color:#ddd;height:100vh;display:flex;flex-direction:column}
+.header{background:#1a1a2e;padding:10px 20px;display:flex;align-items:center;gap:20px;border-bottom:1px solid #333}
+.header h1{color:#00d4ff;font-size:16px}
+.stats{color:#888;font-size:12px;display:flex;gap:15px}
+.stats b{color:#aaa}
+.container{display:flex;flex:1;overflow:hidden}
+.sidebar{width:260px;background:#111;border-right:1px solid #333;padding:10px;overflow-y:auto}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.dropzone{border:2px dashed #444;padding:20px;text-align:center;margin:10px 0;cursor:pointer;border-radius:8px;position:relative}
+.dropzone:hover{border-color:#00d4ff;background:rgba(0,212,255,0.05)}
+.dropzone p{color:#666;font-size:11px}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.file-list{margin-top:5px}
+.file-item{display:flex;align-items:center;gap:5px;padding:5px;background:#1a1a1a;border-radius:4px;margin:3px 0;font-size:10px}
+.file-item .name{flex:1;color:#aaa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-item .size{color:#666}
+.file-item .del{cursor:pointer;color:#666;background:none;border:none;font-size:14px}
+.file-item .del:hover{color:#f44}
+.section-title{color:#666;font-size:9px;text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px}
+.btn{background:#00d4ff;color:#000;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-weight:bold;width:100%;margin:10px 0}
+.btn:hover{background:#00b8e6}
+.btn:disabled{opacity:0.3;cursor:not-allowed}
+.status{font-size:10px;color:#888;padding:5px 10px;background:#1a1a1a;border-radius:4px;margin:5px 0}
+.tabs{display:flex;background:#1a1a2e;border-bottom:1px solid #333}
+.tab{padding:10px 20px;cursor:pointer;color:#666;font-size:12px}
+.tab.active{color:#00d4ff;border-bottom:2px solid #00d4ff}
+.content{flex:1;overflow:auto;padding:10px}
+.filter-bar{display:flex;gap:10px;padding:8px;background:#1a1a1a;border-bottom:1px solid #333}
+.filter-bar input{background:#0a0a0a;border:1px solid #333;color:#ddd;padding:5px 10px;border-radius:4px;width:200px;font-family:monospace;font-size:11px}
+.table-header{display:flex;background:#1a1a1a;padding:5px 10px;border-bottom:1px solid #333;font-size:9px;color:#666;text-transform:uppercase}
+.table-header span{padding:0 5px}
+.col-time{width:120px}.col-ch{width:40px}.col-id{width:150px}.col-dir{width:40px}.col-dlc{width:40px}.col-data{flex:1}
+.table-body{overflow-y:auto;flex:1}
+.row{display:flex;padding:3px 10px;border-bottom:1px solid #222;font-size:11px;align-items:center}
+.row:hover{background:#1a1a1a}
+.row span{padding:0 5px}
+.row .time{color:#888;width:120px}.row .ch{color:#666;width:40px}.row .id{color:#00d4ff;width:150px}.row .dir{color:#666;width:40px}.row .dlc{color:#666;width:40px}.row .data{color:#ffd700;flex:1}
+.row .msg-name{color:#666;font-size:9px;margin-left:5px}
+.signal-list{padding:5px}
+.signal-group{margin:5px 0}
+.signal-group-header{display:flex;align-items:center;gap:8px;padding:5px;cursor:pointer;font-size:11px}
+.signal-group-header:hover{background:#1a1a1a}
+.signal-group-header .arrow{color:#666;font-size:8px}
+.signal-group-header .arrow.open{transform:rotate(90deg)}
+.signal-group-header .id{color:#00d4ff}
+.signal-group-header .name{color:#888;flex:1}
+.signal-group-header .count{background:#333;padding:1px 5px;border-radius:8px;font-size:9px;color:#666}
+.signal-chips{padding:5px 5px 5px 25px;display:none}
+.signal-chips.open{display:block}
+.signal-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;margin:2px;border-radius:10px;font-size:9px;cursor:pointer;border:1px solid #333;background:#1a1a1a;color:#888}
+.signal-chip:hover{background:#222}
+.signal-chip.active{border-color:var(--color);color:#fff}
+.signal-chip .dot{width:5px;height:5px;border-radius:50%;background:var(--color)}
+.chart-container{flex:1;overflow:auto;background:#0a0a0a}
+.chart{min-height:200px;border-bottom:1px solid #222}
+.chart svg{display:block}
+.chart-controls{display:flex;gap:5px;padding:5px;background:#1a1a1a;border-bottom:1px solid #333;flex-wrap:wrap}
+.chart-controls button{background:#1a1a2e;border:1px solid #333;color:#888;padding:3px 8px;border-radius:3px;font-size:10px;cursor:pointer}
+.chart-controls button:hover{background:#222;color:#ddd}
+.chart-controls button.active{border-color:#00d4ff;color:#00d4ff}
+.proto-table{width:100%;border-collapse:collapse;font-size:11px}
+.proto-table th{background:#1a1a1a;padding:8px;text-align:left;color:#666;font-size:9px;text-transform:uppercase;border-bottom:1px solid #333}
+.proto-table td{padding:6px 8px;border-bottom:1px solid #222;color:#888}
+.proto-table tr:hover td{background:#1a1a1a}
+.proto-card{background:#1a1a1a;border:1px solid #333;border-radius:8px;margin:10px 0;overflow:hidden}
+.proto-card-header{display:flex;align-items:center;gap:10px;padding:10px;background:#1a1a2e;border-bottom:1px solid #333}
+.proto-card-header .pid{color:#00d4ff;font-weight:bold}
+.proto-card-header .pname{color:#888}
+.proto-card-header .pinfo{margin-left:auto;color:#666;font-size:10px}
+.debug{background:#1a1a1a;border:1px solid #333;border-radius:5px;padding:10px;margin:10px;font-size:10px;max-height:150px;overflow-y:auto}
+.debug h4{color:#00d4ff;margin-bottom:5px;font-size:11px}
+.debug-item{color:#888;padding:2px 0;border-bottom:1px solid #222}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;color:#444;padding:40px;gap:10px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>CAN总线分析工具</h1>
+  <div class="stats">
+    <span>帧数:<b id="frameCount">0</b></span>
+    <span>ID:<b id="idCount">0</b></span>
+    <span>信号:<b id="sigCount">0</b></span>
+    <span>时长:<b id="duration">0s</b></span>
+  </div>
+</div>
+<div class="container">
+  <div class="sidebar">
+    <div class="section-title">ASC文件</div>
+    <div class="dropzone" id="ascDrop">
+      <p>拖拽 .asc 文件到这里<br>或点击选择</p>
+      <input type="file" id="ascInput" accept=".asc,.txt">
+    </div>
+    <div class="file-list" id="ascList"></div>
+
+    <div class="section-title">DBC文件</div>
+    <div class="dropzone" id="dbcDrop">
+      <p>拖拽 .dbc 文件到这里<br>或点击选择</p>
+      <input type="file" id="dbcInput" accept=".dbc,.txt">
+    </div>
+    <div class="file-list" id="dbcList"></div>
+
+    <div class="status" id="status">请上传ASC和DBC文件</div>
+    <button class="btn" id="analyzeBtn" disabled>开始分析</button>
+
+    <div class="section-title">报文ID</div>
+    <div id="idList" style="max-height:200px;overflow-y:auto"></div>
+  </div>
+
+  <div class="main">
+    <div class="tabs">
+      <div class="tab active" data-tab="raw">原始数据</div>
+      <div class="tab" data-tab="chart">波形图</div>
+      <div class="tab" data-tab="proto">协议定义</div>
+    </div>
+
+    <div id="tab-raw" class="tab-content" style="display:flex;flex-direction:column;flex:1">
+      <div class="filter-bar">
+        <input type="text" id="filterInput" placeholder="筛选ID或数据...">
+        <span id="rowCount" style="color:#666;font-size:11px">0行</span>
+      </div>
+      <div class="table-header">
+        <span class="col-time">时间戳</span>
+        <span class="col-ch">通道</span>
+        <span class="col-id">ID</span>
+        <span class="col-dir">方向</span>
+        <span class="col-dlc">DLC</span>
+        <span class="col-data">数据</span>
+      </div>
+      <div class="table-body" id="rawTable" style="flex:1;overflow-y:auto"></div>
+    </div>
+
+    <div id="tab-chart" class="tab-content" style="display:none;flex-direction:column;flex:1">
+      <div class="chart-controls">
+        <button id="cursorOff" class="active">光标关闭</button>
+        <button id="cursorSingle">单光标</button>
+        <button id="cursorDual">双光标</button>
+        <span style="color:#444">|</span>
+        <button id="resetX">重置X</button>
+        <button id="fitAll">适应全部</button>
+        <button id="resetY">重置Y</button>
+        <span style="color:#444">|</span>
+        <span style="color:#555;font-size:9px">滚轮缩放 | 拖拽平移 | 点击设光标 | 右键清除</span>
+      </div>
+      <div style="display:flex;background:#111;border-bottom:1px solid #333;max-height:150px;overflow-y:auto">
+        <div style="padding:5px 10px;color:#666;font-size:10px">信号:</div>
+        <div class="signal-list" id="signalList" style="flex:1;display:flex;flex-wrap:wrap;padding:5px"></div>
+      </div>
+      <div class="chart-container" id="chartContainer"></div>
+    </div>
+
+    <div id="tab-proto" class="tab-content" style="display:none;overflow-y:auto;padding:10px"></div>
+  </div>
+</div>
+
+<div id="tooltip" style="position:fixed;background:#1a1a1a;border:1px solid #444;border-radius:5px;padding:8px;font-size:10px;z-index:100;display:none;pointer-events:none;max-width:300px;line-height:1.5"></div>
+<div class="debug" id="debugPanel">
+  <h4>调试信息</h4>
+  <div id="debugContent"></div>
+</div>
+
+<script>
+(function(){
+  // 状态
+  var state = {
+    msgs: [], ascFiles: [], dbcFiles: [], dbc: {}, lk: {}, dec: {},
+    selId: null, selSigs: {}, analyzed: false
+  };
+  var colors = ['#00d4ff','#ffd700','#00ff88','#ff6b9d','#c084fc','#f87171','#60a5fa','#2dd4bf','#fb923c','#a3e635'];
+  var chartState = { t0:null, t1:null, cursorMode:0, c1:null, c2:null, hov:null, dragging:false, dpx:0, dt0:0, dt1:0, yr:{}, subs:[] };
+  var ROW_H = 24;
+
+  // 工具函数
+  function $(id){ return document.getElementById(id); }
+  function log(msg){
+    console.log(msg);
+    var el = $('debugContent');
+    el.innerHTML += '<div class="debug-item">' + msg + '</div>';
+    el.scrollTop = el.scrollHeight;
+  }
+  function fmtSize(b){ return b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
+  function toHex(v){ return (v>>>0).toString(16).toUpperCase().padStart(8,'0'); }
+  function d2c(id){ return id>=0x80000000?(id-0x80000000)>>>0:id; }
+
+  // 文件处理
+  function setupDrop(dropId, inputId, type){
+    var drop = $(dropId), input = $(inputId);
+    drop.ondragover = function(e){ e.preventDefault(); drop.style.borderColor='#00d4ff'; };
+    drop.ondragleave = function(){ drop.style.borderColor='#444'; };
+    drop.ondrop = function(e){ e.preventDefault(); drop.style.borderColor='#444'; handleFiles(e.dataTransfer.files, type); };
+    input.onchange = function(){ handleFiles(this.files, type); this.value=''; };
+  }
+  setupDrop('ascDrop','ascInput','asc');
+  setupDrop('dbcDrop','dbcInput','dbc');
+
+  function handleFiles(files, type){
+    var arr = type==='asc'?state.ascFiles:state.dbcFiles;
+    for(var i=0;i<files.length;i++){
+      arr.push({name:files[i].name,size:files[i].size,file:files[i]});
+      log('添加' + type.toUpperCase() + '文件: ' + files[i].name);
+    }
+    renderFileList(type);
+    updateBtn();
+  }
+
+  function renderFileList(type){
+    var arr = type==='asc'?state.ascFiles:state.dbcFiles;
+    var el = $(type==='asc'?'ascList':'dbcList');
+    var html = '';
+    for(var i=0;i<arr.length;i++){
+      html += '<div class="file-item"><span style="color:'+(type==='asc'?'#00d4ff':'#ffd700')+';font-size:9px">'+type.toUpperCase()+'</span><span class="name">'+arr[i].name+'</span><span class="size">'+fmtSize(arr[i].size)+'</span><button class="del" data-t="'+type+'" data-i="'+i+'">×</button></div>';
+    }
+    el.innerHTML = html;
+    el.querySelectorAll('.del').forEach(function(btn){
+      btn.onclick = function(){
+        var t = this.dataset.t, i = parseInt(this.dataset.i);
+        (t==='asc'?state.ascFiles:state.dbcFiles).splice(i,1);
+        renderFileList(t);
+        updateBtn();
+      };
+    });
+  }
+
+  function updateBtn(){
+    var ok = state.ascFiles.length>0 && state.dbcFiles.length>0;
+    $('analyzeBtn').disabled = !ok;
+    $('status').textContent = ok?'ASC:'+state.ascFiles.length+' DBC:'+state.dbcFiles.length:'请上传ASC和DBC文件';
+    $('status').style.color = ok?'#00ff88':'#888';
+  }
+
+  // 读取文件
+  function readFile(file){
+    return new Promise(function(resolve,reject){
+      var reader = new FileReader();
+      reader.onload = function(e){ resolve(e.target.result); };
+      reader.onerror = reject;
+      reader.readAsText(file,'UTF-8');
+    });
+  }
+
+  // DBC解析
+  function parseDBC(content){
+    log('=== 开始解析DBC ===');
+    if(content.charCodeAt(0)===0xFEFF) content = content.substring(1);
+    var lines = content.split(/\r?\n/);
+    var msgCount=0, sigCount=0, curMsg=null;
+
+    for(var i=0;i<lines.length;i++){
+      var line = lines[i].trim();
+      if(line.length<3) continue;
+      if(line[0]==='/'||line[0]==='#'||line[0]===';') continue;
+
+      // 解析BO_
+      if(line.indexOf('BO_')===0){
+        var m = line.match(/BO_\s+(\d+)\s+(\S+)\s*:\s*(\d+)/);
+        if(m){
+          curMsg = parseInt(m[1],10);
+          var name = m[2], dlc = parseInt(m[3],10);
+          var cid = d2c(curMsg), ch = toHex(cid);
+          if(!state.dbc[curMsg]){
+            state.dbc[curMsg] = {did:curMsg,cid:cid,ch:ch,name:name,dlc:dlc,sigs:[]};
+            state.lk[ch] = state.dbc[curMsg];
+            msgCount++;
+            log('报文: 0x'+ch+' '+name);
+          }
+        }
+        continue;
+      }
+
+      // 解析SG_
+      if(curMsg!==null && state.dbc[curMsg]){
+        var sigLine = null;
+        if(line.indexOf('SG_')===0) sigLine = line;
+        else if(line.indexOf(' SG_')>=0) sigLine = line.substring(line.indexOf(' SG_')+1);
+
+        if(sigLine){
+          var ci = sigLine.indexOf(':');
+          if(ci<0) continue;
+          var sigName = sigLine.substring(3,ci).trim();
+          var rest = sigLine.substring(ci+1).trim();
+
+          var bm = rest.match(/(\d+)\|(\d+)@(\d)([+-])/);
+          if(!bm) continue;
+
+          var startBit = parseInt(bm[1],10), bitLen = parseInt(bm[2],10);
+          var byteOrder = parseInt(bm[3],10), sign = bm[4];
+          rest = rest.substring(bm[0].length).trim();
+
+          var fm = rest.match(/$$\s*([-\d.]+)\s*,\s*([-\d.]+)\s*$$/);
+          if(!fm) continue;
+          var factor = parseFloat(fm[1]), offset = parseFloat(fm[2]);
+
+          var minV=null, maxV=null;
+          var rm = rest.match(/$$\s*([-\d.]*)\s*\|\s*([-\d.]*)\s*$$/);
+          if(rm){ if(rm[1]!=='')minV=parseFloat(rm[1]); if(rm[2]!=='')maxV=parseFloat(rm[2]); }
+
+          var unit = '';
+          var um = rest.match(/"([^"]*)"/);
+          if(um) unit = um[1];
+
+          state.dbc[curMsg].sigs.push({
+            name:sigName, full:state.dbc[curMsg].name+'.'+sigName, msg:state.dbc[curMsg].name,
+            start:startBit, len:bitLen, order:byteOrder, sign:sign,
+            scale:factor, offset:offset, min:minV, max:maxV, unit:unit
+          });
+          sigCount++;
+          if(sigCount<=10) log('信号 #'+sigCount+': '+sigName);
+        }
+      }
+    }
+    log('DBC解析完成: '+msgCount+'报文, '+sigCount+'信号');
+    return {msgs:msgCount,sigs:sigCount};
+  }
+
+  // ASC解析
+  function parseASC(content){
+    log('=== 开始解析ASC ===');
+    var lines = content.split(/\r?\n/);
+    var msgs = [], skip = 0;
+
+    for(var i=0;i<lines.length;i++){
+      var line = lines[i].trim();
+      if(line.length<10){ skip++; continue; }
+      var c0 = line.charCodeAt(0);
+      if(c0<45||c0>57){ skip++; continue; }
+
+      var parts = line.split(/\s+/);
+      if(parts.length<7){ skip++; continue; }
+
+      var ts = parseFloat(parts[0]);
+      if(isNaN(ts)){ skip++; continue; }
+
+      var ch = parseInt(parts[1],10);
+      if(isNaN(ch)) ch=1;
+
+      var idStr = parts[2];
+      if(idStr.slice(-1)==='x'||idStr.slice(-1)==='X') idStr = idStr.slice(0,-1);
+      var id = parseInt(idStr,16);
+      if(isNaN(id)){ skip++; continue; }
+
+      var di = -1;
+      for(var j=3;j<parts.length;j++){ if(parts[j]==='d'||parts[j]==='D'){ di=j; break; } }
+      if(di<0||di+1>=parts.length){ skip++; continue; }
+
+      var dlc = parseInt(parts[di+1],10);
+      if(isNaN(dlc)||dlc<0||dlc>64){ skip++; continue; }
+
+      var data = [];
+      for(var k=di+2;k<parts.length&&data.length<dlc;k++){
+        var v = parseInt(parts[k],16);
+        if(!isNaN(v)) data.push(v);
+      }
+      while(data.length<dlc) data.push(0);
+
+      msgs.push({ts:ts,ch:ch,id:id,idH:toHex(d2c(id)),dir:'Rx',dlc:dlc,data:data});
+    }
+    msgs.sort(function(a,b){return a.ts-b.ts;});
+    log('ASC解析完成: '+msgs.length+'帧, 跳过'+skip+'行');
+    return msgs;
+  }
+
+  // 位提取
+  function extractBits(data,start,len,order){
+    var raw = 0;
+    if(order===1){
+      for(var i=0;i<len;i++){
+        var bp=start+i, bi=bp>>3, bit=bp&7;
+        if(bi>=0&&bi<data.length&&(data[bi]&(1<<bit))) raw|=(1<<i);
+      }
+    } else {
+      for(var j=0;j<len;j++){
+        var bp2=start-j, bi2=bp2>>3, bit2=bp2&7;
+        if(bi2>=0&&bi2<data.length&&(data[bi2]&(1<<bit2))) raw|=(1<<(len-1-j));
+      }
+    }
+    return raw;
+  }
+
+  // 解码信号
+  function decodeSignals(){
+    log('=== 解码信号 ===');
+    state.dec = {};
+    var count = 0;
+    for(var i=0;i<state.msgs.length;i++){
+      var m = state.msgs[i], def = state.lk[m.idH];
+      if(!def||!def.sigs.length) continue;
+      for(var j=0;j<def.sigs.length;j++){
+        var sig = def.sigs[j];
+        var raw = extractBits(m.data,sig.start,sig.len,sig.order);
+        var phys = raw*sig.scale+sig.offset;
+        if(!state.dec[sig.full]) state.dec[sig.full]=[];
+        state.dec[sig.full].push({t:m.ts,v:phys});
+        count++;
+      }
+    }
+    log('解码完成: '+count+'值, '+Object.keys(state.dec).length+'信号');
+  }
+
+  // 主分析
+  $('analyzeBtn').onclick = async function(){
+    if(!state.ascFiles.length||!state.dbcFiles.length) return;
+    state.msgs=[]; state.dbc={}; state.lk={}; state.dec={}; state.selId=null; state.selSigs={}; state.analyzed=false;
+    $('debugContent').innerHTML='';
+
+    log('开始分析...');
+    try{
+      var dbcContent='';
+      for(var d=0;d<state.dbcFiles.length;d++) dbcContent+=await readFile(state.dbcFiles[d].file);
+      parseDBC(dbcContent);
+
+      for(var a=0;a<state.ascFiles.length;a++){
+        var ascContent=await readFile(state.ascFiles[a].file);
+        state.msgs=state.msgs.concat(parseASC(ascContent));
+      }
+      state.msgs.sort(function(a,b){return a.ts-b.ts;});
+      decodeSignals();
+      state.analyzed=true;
+      log('分析完成!');
+      updateStats();
+      renderIdList();
+      renderRaw();
+      renderSignals();
+      renderProto();
+    } catch(e){
+      log('错误: '+e.message);
+    }
+  };
+
+  function updateStats(){
+    $('frameCount').textContent=state.msgs.length;
+    var ids={};
+    for(var i=0;i<state.msgs.length;i++) ids[state.msgs[i].idH]=1;
+    $('idCount').textContent=Object.keys(ids).length;
+    if(state.msgs.length>1) $('duration').textContent=(state.msgs[state.msgs.length-1].ts-state.msgs[0].ts).toFixed(3)+'s';
+    var sc=0; for(var k in state.dbc) sc+=state.dbc[k].sigs.length;
+    $('sigCount').textContent=sc;
+  }
+
+  function renderIdList(){
+    var counts={};
+    for(var i=0;i<state.msgs.length;i++) counts[state.msgs[i].idH]=(counts[state.msgs[i].idH]||0)+1;
+    var el=$('idList'), html='', sorted=Object.keys(counts).sort();
+    for(var k=0;k<sorted.length;k++){
+      var idH=sorted[k], def=state.lk[idH], hasSigs=def&&def.sigs.length>0;
+      html+='<div class="file-item" style="cursor:pointer;background:'+(state.selId===idH?'#1a1a2e':'#1a1a1a')+'" data-id="'+idH+'"><span class="dot" style="background:'+colors[k%colors.length]+';width:6px;height:6px;border-radius:50%"></span><span class="name" style="color:#00d4ff">0x'+idH+'</span><span style="color:#888;font-size:9px">'+(def?def.name:'未知')+'</span>'+(hasSigs?'<span style="color:#00ff88;font-size:9px">✓</span>':'')+'<span class="size">'+counts[idH]+'</span></div>';
+    }
+    el.innerHTML=html;
+    el.querySelectorAll('[data-id]').forEach(function(item){
+      item.onclick=function(){
+        var id=this.dataset.id;
+        state.selId = state.selId===id?null:id;
+        renderIdList();
+        renderRaw();
+      };
+    });
+  }
+
+  function renderRaw(){
+    var filter=$('filterInput').value.toLowerCase();
+    var msgs=state.msgs;
+    if(state.selId) msgs=msgs.filter(function(m){return m.idH===state.selId;});
+    if(filter) msgs=msgs.filter(function(m){
+      if(m.idH.toLowerCase().indexOf(filter)>=0) return true;
+      var ds=''; for(var i=0;i<m.data.length;i++) ds+=m.data[i].toString(16).padStart(2,'0')+' ';
+      if(ds.indexOf(filter)>=0) return true;
+      var def=state.lk[m.idH]; if(def&&def.name.toLowerCase().indexOf(filter)>=0) return true;
+      return false;
+    });
+
+    $('rowCount').textContent=msgs.length+'行';
+    var el=$('rawTable');
+    if(!msgs.length){ el.innerHTML='<div class="empty">无数据</div>'; return; }
+
+    var html='';
+    for(var i=0;i<Math.min(msgs.length,1000);i++){
+      var m=msgs[i], ds='';
+      for(var j=0;j<m.data.length;j++) ds+=m.data[j].toString(16).padStart(2,'0').toUpperCase()+' ';
+      var def=state.lk[m.idH];
+      html+='<div class="row"><span class="time">'+m.ts.toFixed(6)+'</span><span class="ch">'+m.ch+'</span><span class="id">0x'+m.idH+(def?'<span class="msg-name">'+def.name+'</span>':'')+'</span><span class="dir">'+m.dir+'</span><span class="dlc">'+m.dlc+'</span><span class="data">'+ds+'</span></div>';
+    }
+    el.innerHTML=html;
+  }
+  $('filterInput').oninput=renderRaw;
+
+  function renderSignals(){
+    var el=$('signalList');
+    var names=Object.keys(state.dec).sort();
+    var groups={};
+    for(var i=0;i<names.length;i++){
+      var sn=names[i], parts=sn.split('.'), msgP=parts[0], sigP=parts.slice(1).join('.');
+      if(!groups[msgP]) groups[msgP]=[];
+      groups[msgP].push({full:sn,sig:sigP});
+    }
+
+    var html='';
+    var gk=Object.keys(groups).sort();
+    for(var g=0;g<gk.length;g++){
+      var gid=gk[g], sigs=groups[gid], def=state.lk[gid];
+      html+='<div class="signal-group"><div class="signal-group-header" data-g="'+gid+'"><span class="arrow open">▶</span><span class="id">0x'+gid+'</span><span class="name">'+(def?def.name:'')+'</span><span class="count">'+sigs.length+'</span></div><div class="signal-chips open">';
+      for(var s=0;s<sigs.length;s++){
+        var sig=sigs[s], col=colors[s%colors.length], active=state.selSigs[sig.full]?true:false;
+        html+='<span class="signal-chip'+(active?' active':'')+'" style="--color:'+col+'" data-sig="'+sig.full+'"><span class="dot"></span>'+sig.sig+'</span>';
+      }
+      html+='</div></div>';
+    }
+    el.innerHTML=html;
+
+    el.querySelectorAll('.signal-group-header').forEach(function(h){
+      h.onclick=function(){
+        this.querySelector('.arrow').classList.toggle('open');
+        this.nextElementSibling.classList.toggle('open');
+      };
+    });
+    el.querySelectorAll('.signal-chip').forEach(function(chip){
+      chip.onclick=function(){
+        var sig=this.dataset.sig;
+        if(state.selSigs[sig]) delete state.selSigs[sig];
+        else state.selSigs[sig]=true;
+        renderSignals();
+        renderChart();
+      };
+    });
+  }
+
+  function renderChart(){
+    var container=$('chartContainer');
+    var sigNames=[];
+    for(var k in state.selSigs) if(state.dec[k]) sigNames.push(k);
+    sigNames.sort();
+
+    if(!sigNames.length){
+      container.innerHTML='<div class="empty"><p>请在上方选择信号</p></div>';
+      chartState.subs=[];
+      return;
+    }
+
+    var sigData=[], allT=[];
+    for(var s=0;s<sigNames.length;s++){
+      var sn=sigNames[s], d=state.dec[sn], pts=[];
+      for(var i=0;i<d.length;i++){ pts.push({t:d[i].t,v:d[i].v}); allT.push(d[i].t); }
+      var unit=''; for(var uk in state.dbc){ var sg=state.dbc[uk].sigs; for(var i2=0;i2<sg.length;i2++){ if(sg[i2].full===sn){unit=sg[i2].unit;break;} } }
+      sigData.push({name:sn,short:sn.split('.').slice(1).join('.'),unit:unit,data:pts,color:colors[s%colors.length]});
+    }
+
+    if(!allT.length){ container.innerHTML='<div class="empty">无数据</div>'; return; }
+
+    var tMin=Math.min.apply(null,allT), tMax=Math.max.apply(null,allT);
+    var tR=tMax-tMin||1;
+    if(chartState.t0===null){ chartState.t0=tMin-tR*0.02; chartState.t1=tMax+tR*0.02; }
+
+    // 按单位分组
+    var byU={};
+    for(var s2=0;s2<sigData.length;s2++){
+      var u=sigData[s2].unit;
+      if(!byU[u]) byU[u]=[];
+      byU[u].push(sigData[s2]);
+    }
+
+    container.innerHTML='';
+    chartState.subs=[];
+    var units=Object.keys(byU);
+
+    for(var g=0;g<units.length;g++){
+      var grp=byU[units[g]], vMin=1e30, vMax=-1e30;
+      for(var si=0;si<grp.length;si++){
+        var dd=grp[si].data;
+        for(var di=0;di<dd.length;di++){
+          if(dd[di].v<vMin) vMin=dd[di].v;
+          if(dd[di].v>vMax) vMax=dd[di].v;
+        }
+      }
+      var vR=vMax-vMin||1;
+      var yr=chartState.yr[units[g]];
+      var yMin=yr?yr.min:vMin-vR*0.08, yMax=yr?yr.max:vMax+vR*0.08;
+      if(yMax<=yMin) yMax=yMin+1;
+
+      var sub=createChart(units[g],grp,yMin,yMax);
+      container.appendChild(sub.el);
+      chartState.subs.push(sub);
+    }
+  }
+
+  function createChart(unit,sigs,yMin,yMax){
+    var NS='http://www.w3.org/2000/svg';
+    var mg={top:30,right:20,bottom:30,left:60}, W=800, H=180;
+    var pw=W-mg.left-mg.right, ph=H-mg.top-mg.bottom;
+
+    var wrap=document.createElement('div');
+    wrap.className='chart';
+    wrap.style.minHeight=H+'px';
+
+    var svg=document.createElementNS(NS,'svg');
+    svg.setAttribute('width','100%');
+    svg.setAttribute('height',H);
+    svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    svg.style.cursor='crosshair';
+
+    var bg=document.createElementNS(NS,'rect');
+    bg.setAttribute('width',W); bg.setAttribute('height',H); bg.setAttribute('fill','#0a0a0a');
+    svg.appendChild(bg);
+
+    var defs=document.createElementNS(NS,'defs');
+    var clipId='c'+Math.random().toString(36).substr(2,6);
+    var cp=document.createElementNS(NS,'clipPath'); cp.id=clipId;
+    var cr=document.createElementNS(NS,'rect');
+    cr.setAttribute('x',mg.left); cr.setAttribute('y',mg.top); cr.setAttribute('width',pw); cr.setAttribute('height',ph);
+    cp.appendChild(cr); defs.appendChild(cp); svg.appendChild(defs);
+
+    var gridG=document.createElementNS(NS,'g'); svg.appendChild(gridG);
+    var plotG=document.createElementNS(NS,'g'); plotG.setAttribute('clip-path','url(#'+clipId+')'); svg.appendChild(plotG);
+
+    var paths=[];
+    for(var i=0;i<sigs.length;i++){
+      var p=document.createElementNS(NS,'path');
+      p.setAttribute('fill','none'); p.setAttribute('stroke',sigs[i].color); p.setAttribute('stroke-width','1.5');
+      plotG.appendChild(p); paths.push(p);
+    }
+
+    var axG=document.createElementNS(NS,'g'); svg.appendChild(axG);
+    var lgG=document.createElementNS(NS,'g'); svg.appendChild(lgG);
+    wrap.appendChild(svg);
+
+    var sub={el:wrap,svg:svg,unit:unit,sigs:sigs,yMin:yMin,yMax:yMax,mg:mg,W:W,H:H,pw:pw,ph:ph,gridG:gridG,paths:paths,axG:axG,lgG:lgG};
+
+    // ResizeObserver
+    var ro=new ResizeObserver(function(entries){
+      for(var e=0;e<entries.length;e++){
+        var w=Math.max(Math.floor(entries[e].contentRect.width),200);
+        sub.W=w; sub.pw=w-mg.left-mg.right;
+        svg.setAttribute('viewBox','0 0 '+w+' '+H);
+        bg.setAttribute('width',w); cr.setAttribute('width',sub.pw);
+        drawChart(sub);
+      }
+    });
+    ro.observe(wrap);
+
+    // 滚轮缩放
+    svg.addEventListener('wheel',function(e){
+      e.preventDefault();
+      var rect=svg.getBoundingClientRect(), mx=e.clientX-rect.left;
+      var tAt=chartState.t0+(mx-mg.left)/sub.pw*(chartState.t1-chartState.t0);
+      var factor=e.deltaY>0?1.15:0.87;
+      var nR=(chartState.t1-chartState.t0)*factor;
+      var totR=1; // 简化
+      if(nR<0.001) nR=0.001;
+      var ratio=(tAt-chartState.t0)/(chartState.t1-chartState.t0);
+      if(isNaN(ratio)||!isFinite(ratio)) ratio=0.5;
+      chartState.t0=tAt-ratio*nR; chartState.t1=tAt+(1-ratio)*nR;
+      redrawAll();
+    },{passive:false});
+
+    // 拖拽
+    svg.addEventListener('mousedown',function(e){
+      if(e.button!==0) return;
+      chartState.dragging=true; chartState.dpx=e.clientX;
+      chartState.dt0=chartState.t0; chartState.dt1=chartState.t1;
+      window.addEventListener('mousemove',onDrag); window.addEventListener('mouseup',onDragEnd);
+    });
+
+    // 光标
+    svg.addEventListener('mousemove',function(e){
+      if(chartState.dragging) return;
+      var rect=svg.getBoundingClientRect(), mx=e.clientX-rect.left;
+      if(mx<mg.left||mx>mg.left+sub.pw){ chartState.hov=null; updateCursor(); return; }
+      chartState.hov=chartState.t0+(mx-mg.left)/sub.pw*(chartState.t1-chartState.t0);
+      updateCursor();
+    });
+    svg.addEventListener('mouseleave',function(){ chartState.hov=null; updateCursor(); });
+
+    svg.addEventListener('click',function(e){
+      if(chartState.cursorMode===0) return;
+      var rect=svg.getBoundingClientRect(), mx=e.clientX-rect.left;
+      if(mx<mg.left||mx>mg.left+sub.pw) return;
+      var ct=chartState.t0+(mx-mg.left)/sub.pw*(chartState.t1-chartState.t0);
+      if(chartState.cursorMode===1) chartState.c1=ct;
+      else if(chartState.cursorMode===2){ if(chartState.c1===null) chartState.c1=ct; else chartState.c2=ct; }
+      updateCursor();
+    });
+    svg.addEventListener('contextmenu',function(e){ e.preventDefault(); chartState.c1=null; chartState.c2=null; updateCursor(); });
+
+    drawChart(sub);
+    return sub;
+  }
+
+  function drawChart(sub){
+    var mg=sub.mg, pw=sub.pw, ph=sub.ph;
+    var vt0=chartState.t0, vt1=chartState.t1;
+    var yMin=sub.yMin, yMax=sub.yMax, yR=yMax-yMin||1;
+
+    function tx(t){ return mg.left+((t-vt0)/(vt1-vt0))*pw; }
+    function ty(v){ return mg.top+ph-((v-yMin)/yR)*ph; }
+
+    // 网格
+    var gh='';
+    var yS=niceStep(yR,5), ySt=Math.ceil(yMin/yS)*yS;
+    for(var yv=ySt;yv<=yMax;yv+=yS){ var gy=ty(yv); gh+='<line x1="'+mg.left+'" y1="'+gy+'" x2="'+(mg.left+pw)+'" y2="'+gy+'" stroke="#222" stroke-width="0.5"/>'; }
+    var tS=niceStep(vt1-vt0,10), tSt=Math.ceil(vt0/tS)*tS;
+    for(var tv=tSt;tv<=vt1;tv+=tS){ var gx=tx(tv); if(gx>=mg.left&&gx<=mg.left+pw) gh+='<line x1="'+gx+'" y1="'+mg.top+'" x2="'+gx+'" y2="'+(mg.top+ph)+'" stroke="#222" stroke-width="0.5"/>'; }
+    sub.gridG.innerHTML=gh;
+
+    // 曲线
+    for(var i=0;i<sub.sigs.length;i++){
+      var pts=sub.sigs[i].data;
+      if(!pts.length){ sub.paths[i].setAttribute('d',''); continue; }
+      var d='M'+tx(pts[0].t).toFixed(1)+','+ty(pts[0].v).toFixed(1);
+      for(var p=1;p<pts.length;p++) d+='L'+tx(pts[p].t).toFixed(1)+','+ty(pts[p].v).toFixed(1);
+      sub.paths[i].setAttribute('d',d);
+    }
+
+    // 坐标轴
+    var ah='<line x1="'+mg.left+'" y1="'+mg.top+'" x2="'+mg.left+'" y2="'+(mg.top+ph)+'" stroke="#444" stroke-width="1"/>';
+    var yS2=niceStep(yR,5), ySt2=Math.ceil(yMin/yS2)*yS2;
+    for(var yv2=ySt2;yv2<=yMax;yv2+=yS2){
+      var yy=ty(yv2);
+      ah+='<line x1="'+(mg.left-3)+'" y1="'+yy+'" x2="'+(mg.left+3)+'" y2="'+yy+'" stroke="#666" stroke-width="1"/>';
+      ah+='<text x="'+(mg.left-6)+'" y="'+(yy+3)+'" fill="#888" font-size="9" text-anchor="end" font-family="monospace">'+fmtVal(yv2)+'</text>';
+    }
+    if(sub.unit) ah+='<text x="'+(mg.left-6)+'" y="'+(mg.top-8)+'" fill="#666" font-size="9" text-anchor="end" font-family="monospace">'+sub.unit+'</text>';
+    ah+='<line x1="'+mg.left+'" y1="'+(mg.top+ph)+'" x2="'+(mg.left+pw)+'" y2="'+(mg.top+ph)+'" stroke="#333" stroke-width="0.5"/>';
+    var tS2=niceStep(vt1-vt0,10), tSt2=Math.ceil(vt0/tS2)*tS2;
+    for(var tv2=tSt2;tv2<=vt1;tv2+=tS2){
+      var gx2=tx(tv2);
+      if(gx2>=mg.left&&gx2<=mg.left+pw){
+        ah+='<line x1="'+gx2+'" y1="'+(mg.top+ph)+'" x2="'+gx2+'" y2="'+(mg.top+ph+4)+'" stroke="#666" stroke-width="1"/>';
+        ah+='<text x="'+gx2+'" y="'+(mg.top+ph+14)+'" fill="#666" font-size="8" text-anchor="middle" font-family="monospace">'+tv2.toFixed(3)+'</text>';
+      }
+    }
+    sub.axG.innerHTML=ah;
+
+    // 图例
+    var lh='', lx=mg.left+4;
+    for(var li=0;li<sub.sigs.length;li++){
+      var txt=sub.sigs[li].short;
+      if(lx+txt.length*7+20>mg.left+pw) break;
+      lh+='<rect x="'+lx+'" y="8" width="8" height="8" rx="2" fill="'+sub.sigs[li].color+'"/>';
+      lh+='<text x="'+(lx+12)+'" y="16" fill="#888" font-size="9" font-family="monospace">'+txt+'</text>';
+      lx+=txt.length*7+20;
+    }
+    sub.lgG.innerHTML=lh;
+  }
+
+  function niceStep(range,target){
+    if(range<=0) return 1;
+    var rough=range/target, mag=Math.pow(10,Math.floor(Math.log10(rough))), norm=rough/mag;
+    if(norm<=1) return mag; if(norm<=2) return 2*mag; if(norm<=5) return 5*mag; return 10*mag;
+  }
+  function fmtVal(v){ return Math.abs(v)>=100?v.toFixed(1):Math.abs(v)>=1?v.toFixed(2):v.toFixed(3); }
+
+  function redrawAll(){ for(var i=0;i<chartState.subs.length;i++) drawChart(chartState.subs[i]); }
+
+  function onDrag(e){
+    if(!chartState.dragging) return;
+    var dx=e.clientX-chartState.dpx, sub=chartState.subs[0];
+    if(!sub) return;
+    var dt=-(dx/sub.pw)*(chartState.dt1-chartState.dt0);
+    chartState.t0=chartState.dt0+dt; chartState.t1=chartState.dt1+dt;
+    redrawAll();
+  }
+  function onDragEnd(){ chartState.dragging=false; window.removeEventListener('mousemove',onDrag); window.removeEventListener('mouseup',onDragEnd); }
+
+  function updateCursor(){
+    var el=$('tooltip');
+    if(chartState.cursorMode===0){ el.style.display='none'; return; }
+
+    var allS=[];
+    for(var i=0;i<chartState.subs.length;i++) for(var j=0;j<chartState.subs[i].sigs.length;j++) allS.push(chartState.subs[i].sigs[j]);
+    if(!allS.length){ el.style.display='none'; return; }
+
+    var t=(chartState.cursorMode===1)?(chartState.c1!==null?chartState.c1:chartState.hov):(chartState.c2!==null?chartState.c2:chartState.hov);
+    if(t===null){ el.style.display='none'; return; }
+
+    var html='<div style="color:#ffd700;font-weight:bold;margin-bottom:3px">T = '+t.toFixed(4)+' s</div>';
+    for(var s=0;s<allS.length;s++){
+      var pt=findPt(allS[s].data,t);
+      if(!pt) continue;
+      html+='<div style="display:flex;align-items:center;gap:5px;margin:2px 0"><span style="width:6px;height:6px;border-radius:50%;background:'+allS[s].color+'"></span><span style="color:#888">'+allS[s].short+'</span>: <span style="color:#fff;font-weight:bold">'+pt.v.toFixed(3)+'</span> <span style="color:#666;font-size:9px">'+allS[s].unit+'</span></div>';
+    }
+    el.innerHTML=html; el.style.display='block';
+
+    var mx=window._mx||innerWidth/2, my=window._my||innerHeight/2;
+    var left=mx+15, top=my-10;
+    if(left+el.offsetWidth>innerWidth-10) left=mx-el.offsetWidth-15;
+    if(top+el.offsetHeight>innerHeight-10) top=innerHeight-el.offsetHeight-10;
+    el.style.left=Math.max(10,left)+'px'; el.style.top=Math.max(10,top)+'px';
+  }
+  function findPt(pts,t){
+    if(!pts||!pts.length) return null;
+    var lo=0,hi=pts.length-1;
+    while(lo<hi-1){ var mid=(lo+hi)>>1; if(pts[mid].t<t) lo=mid; else hi=mid; }
+    return Math.abs(pts[lo].t-t)<=Math.abs(pts[hi].t-t)?pts[lo]:pts[hi];
+  }
+  document.onmousemove=function(e){ window._mx=e.clientX; window._my=e.clientY; };
+
+  // 按钮
+  $('resetX').onclick=function(){ chartState.t0=null; chartState.t1=null; renderChart(); };
+  $('fitAll').onclick=function(){
+    var allT=[],sl=[]; for(var k in state.selSigs) if(state.dec[k]) sl.push(k);
+    for(var i=0;i<sl.length;i++){ var d=state.dec[sl[i]]; for(var j=0;j<d.length;j++) allT.push(d[j].t); }
+    if(allT.length){ var mn=Math.min.apply(null,allT), mx=Math.max.apply(null,allT), r=mx-mn||1; chartState.t0=mn-r*0.02; chartState.t1=mx+r*0.02; }
+    renderChart();
+  };
+  $('resetY').onclick=function(){ chartState.yr={}; renderChart(); };
+  $('cursorOff').onclick=function(){ setCursor(0); };
+  $('cursorSingle').onclick=function(){ setCursor(1); };
+  $('cursorDual').onclick=function(){ setCursor(2); };
+  function setCursor(m){
+    chartState.cursorMode=m; chartState.c1=null; chartState.c2=null;
+    $('cursorOff').classList.toggle('active',m===0);
+    $('cursorSingle').classList.toggle('active',m===1);
+    $('cursorDual').classList.toggle('active',m===2);
+    updateCursor();
+  }
+
+  // 标签页
+  document.querySelectorAll('.tab').forEach(function(tab){
+    tab.onclick=function(){
+      var tn=this.dataset.tab;
+      document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===tn);});
+      document.querySelectorAll('.tab-content').forEach(function(c){c.style.display='none';});
+      $('tab-'+tn).style.display=tn==='raw'?'flex':'block';
+      if(tn==='raw') renderRaw();
+      if(tn==='chart'){ renderSignals(); chartState.t0=null; chartState.t1=null; chartState.yr={}; renderChart(); }
+      if(tn==='proto') renderProto();
+    };
+  });
+
+  function renderProto(){
+    var el=$('tab-proto');
+    var defs=[]; for(var k in state.dbc) defs.push(state.dbc[k]);
+    defs.sort(function(a,b){return a.name.localeCompare(b.name);});
+
+    if(!defs.length){ el.innerHTML='<div class="empty">无协议定义</div>'; return; }
+
+    var html='';
+    for(var d=0;d<defs.length;d++){
+      var def=defs[d];
+      if(!def.dlc&&!def.sigs.length) continue;
+      var cnt=0; for(var m=0;m<state.msgs.length;m++) if(state.msgs[m].idH===def.ch) cnt++;
+
+      html+='<div class="proto-card"><div class="proto-card-header"><span class="pid">0x'+def.ch+'</span><span class="pname">'+def.name+'</span><span class="pinfo">长度:'+def.dlc+' | 帧数:'+cnt+' | 信号:'+def.sigs.length+'</span></div>';
+      html+='<table class="proto-table"><thead><tr><th>信号</th><th>起始位</th><th>长度</th><th>字节序</th><th>系数</th><th>偏移</th><th>单位</th><th>范围</th></tr></thead><tbody>';
+      for(var s=0;s<def.sigs.length;s++){
+        var sig=def.sigs[s];
+        html+='<tr><td style="color:#ddd">'+sig.name+'</td><td>'+sig.start+'</td><td>'+sig.len+'</td><td>'+(sig.order===1?'Intel':'Motorola')+'</td><td>'+sig.scale+'</td><td>'+sig.offset+'</td><td style="color:#666">'+sig.unit+'</td><td>'+(sig.min!==null?sig.min+' ~ '+sig.max:'-')+'</td></tr>';
+      }
+      html+='</tbody></table></div>';
+    }
+    el.innerHTML=html;
+  }
+
+  log('CAN总线分析工具就绪');
+  log('当前协议: '+location.protocol);
+})();
+</script>
+</body>
+</html>
